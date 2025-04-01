@@ -1,0 +1,155 @@
+// Components/Shared/FileUploader.razor
+@using Microsoft.AspNetCore.Components.Forms
+@using FFB.ContentTransformation.Data.Entities
+@using FFB.ContentTransformation.Services.DocumentProcessing
+@inject IDocumentProcessingService DocumentProcessingService
+
+<div class="file-uploader">
+    <InputFile OnChange="@HandleFileSelection" multiple accept=".pdf,.docx,.txt" />
+
+    @if (SelectedFiles.Any())
+    {
+        <div class="selected-files mt-3">
+            <h5>Fichiers sélectionnés:</h5>
+            <ul>
+                @foreach (var file in SelectedFiles)
+                {
+                    <li>
+                        <span>@file.Name</span>
+                        <span class="file-size">(@FormatFileSize(file.Size))</span>
+                        @if (UploadingFiles.Contains(file.Name))
+                        {
+                            <FluentProgressRing Size="@ProgressRingSize.Tiny" />
+                        }
+                    </li>
+                }
+            </ul>
+
+            <FluentButton OnClick="@UploadFiles" Disabled="@(UploadingFiles.Any() || !SelectedFiles.Any())">
+                Charger les fichiers
+            </FluentButton>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <FluentMessageBar Type="MessageBarType.Error" class="mt-3">
+            @ErrorMessage
+        </FluentMessageBar>
+    }
+</div>
+
+@code {
+    private List<IBrowserFile> SelectedFiles { get; set; } = new();
+    private HashSet<string> UploadingFiles { get; set; } = new();
+    private string? ErrorMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<Document> OnDocumentUploaded { get; set; }
+
+    private void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        ErrorMessage = null;
+        SelectedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(10)) // Limit to 10 files
+        {
+            // Validate file size (10MB max)
+            if (file.Size > 10 * 1024 * 1024)
+            {
+                ErrorMessage = $"Le fichier {file.Name} dépasse la limite de 10 MB.";
+                continue;
+            }
+
+            // Validate file type
+            var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+            if (extension != ".pdf" && extension != ".docx" && extension != ".txt")
+            {
+                ErrorMessage = $"Le type de fichier {extension} n'est pas supporté. Utilisez PDF, DOCX ou TXT.";
+                continue;
+            }
+
+            SelectedFiles.Add(file);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task UploadFiles()
+    {
+        try
+        {
+            foreach (var file in SelectedFiles)
+            {
+                UploadingFiles.Add(file.Name);
+                StateHasChanged();
+
+                var document = await DocumentProcessingService.UploadDocumentAsync(file);
+
+                // Wait a bit to simulate processing
+                await Task.Delay(1000);
+
+                UploadingFiles.Remove(file.Name);
+                await OnDocumentUploaded.InvokeAsync(document);
+            }
+
+            SelectedFiles.Clear();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Erreur lors du chargement des fichiers: {ex.Message}";
+            UploadingFiles.Clear();
+        }
+
+        StateHasChanged();
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+
+        return $"{size:0.##} {sizes[order]}";
+    }
+}
+
+<style>
+    .file-uploader {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        border-radius: 5px;
+    }
+
+    .selected-files {
+        text-align: left;
+    }
+
+    .selected-files ul {
+        list-style: none;
+        padding: 0;
+    }
+
+    .selected-files li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 5px;
+    }
+
+    .file-size {
+        color: #666;
+        font-size: 0.9em;
+    }
+
+    .mt-3 {
+        margin-top: 15px;
+    }
+</style>

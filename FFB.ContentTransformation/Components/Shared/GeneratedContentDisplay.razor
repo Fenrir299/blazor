@@ -1,0 +1,160 @@
+// Components/Shared/GeneratedContentDisplay.razor
+@inject IJSRuntime JSRuntime
+
+<div class="content-display">
+    <div class="actions">
+        <FluentButton OnClick="CopyToClipboard" Title="Copier dans le presse-papier">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Copy())" />
+            <span class="ms-2">Copier</span>
+        </FluentButton>
+
+        <FluentButton OnClick="DownloadContent" Title="Télécharger en tant que fichier texte">
+            <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDownload())" />
+            <span class="ms-2">Télécharger</span>
+        </FluentButton>
+    </div>
+
+    <div class="content-box @GetContentStyleClass()">
+        @if (ContentType == ContentType.WebArticle)
+        {
+            <div class="markdown-content">
+                @((MarkupString)ConvertMarkdownToHtml(Content))
+            </div>
+        }
+        else
+        {
+            <pre class="content-text">@Content</pre>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Content { get; set; } = string.Empty;
+
+    [Parameter]
+    public ContentType ContentType { get; set; } = ContentType.WebArticle;
+
+    private async Task CopyToClipboard()
+    {
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", Content);
+    }
+
+    private async Task DownloadContent()
+    {
+        var fileName = ContentType switch
+        {
+            ContentType.WebArticle => "article.md",
+            ContentType.LinkedInPost => "linkedin-post.txt",
+            ContentType.Email => "email.txt",
+            _ => "content.txt"
+        };
+
+        var contentType = "text/plain";
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(Content);
+        var base64Content = Convert.ToBase64String(fileBytes);
+
+        await JSRuntime.InvokeVoidAsync(
+        "eval",
+        $@"
+var link = document.createElement('a');
+link.download = '{fileName}';
+link.href = 'data:{contentType};base64,{base64Content}';
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+"
+        );
+    }
+
+    private string GetContentStyleClass()
+    {
+        return ContentType switch
+        {
+            ContentType.WebArticle => "article-style",
+            ContentType.LinkedInPost => "linkedin-style",
+            ContentType.Email => "email-style",
+            _ => string.Empty
+        };
+    }
+
+    private string ConvertMarkdownToHtml(string markdown)
+    {
+        // This is a very simplified markdown converter for the POC
+        // In a real application, use a proper markdown library
+        var html = markdown
+        .Replace("\n\n", "<br/><br/>")
+        .Replace("\n", "<br/>")
+        .Replace("# ", "<h1>").Replace(" #", "</h1>")
+        .Replace("## ", "<h2>").Replace(" ##", "</h2>")
+        .Replace("### ", "<h3>").Replace(" ###", "</h3>");
+
+        // Convert basic formatting
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.*?)\*\*", "<strong>$1</strong>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.*?)\*", "<em>$1</em>");
+
+        return html;
+    }
+}
+
+<style>
+    .content-display {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .content-box {
+        border: 1px solid #eaeaea;
+        padding: 20px;
+        border-radius: 5px;
+        max-height: 500px;
+        overflow-y: auto;
+        background-color: white;
+    }
+
+    .content-text {
+        white-space: pre-wrap;
+        margin: 0;
+        font-family: inherit;
+    }
+
+    .markdown-content h1 {
+        font-size: 1.8rem;
+        margin-top: 0;
+        margin-bottom: 1rem;
+    }
+
+    .markdown-content h2 {
+        font-size: 1.5rem;
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .markdown-content h3 {
+        font-size: 1.2rem;
+        margin-top: 1.2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .article-style {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .linkedin-style {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .email-style {
+        font-family: 'Courier New', Courier, monospace;
+    }
+
+    .ms-2 {
+        margin-left: 0.5rem;
+    }
+</style>

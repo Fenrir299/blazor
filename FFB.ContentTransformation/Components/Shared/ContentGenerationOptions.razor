@@ -1,0 +1,89 @@
+// Components/Shared/ContentGenerationOptions.razor
+@using FFB.ContentTransformation.Data.Entities
+@using FFB.ContentTransformation.Models
+
+<div class="options-container">
+    <div class="options-row">
+        <h4>Cible</h4>
+        <div class="target-buttons">
+            @foreach (var option in ContentTargetOptions.Options)
+            {
+                <FluentButton
+                    Appearance="@(Model.SelectedContentType == option.Key ? Appearance.Accent : Appearance.Neutral)"
+                    OnClick="@(() => SelectContentType(option.Key))">
+                    @option.Value
+                </FluentButton>
+            }
+        </div>
+    </div>
+
+    <div class="options-row">
+        <h4>Format</h4>
+        <div class="format-buttons">
+            @foreach (var option in ContentFormatOptions.Options)
+            {
+                <FluentButton Appearance="@(Model.SelectedFormat == option.Key ? Appearance.Accent : Appearance.Neutral)"
+                    OnClick="@(() => SelectFormat(option.Key))">
+                    @option.Value
+                </FluentButton>
+            }
+        </div>
+    </div>
+
+    <div class="options-row">
+        <h4>Instructions supplémentaires (optionnel)</h4>
+        <FluentTextArea @bind-Value="@Model.CustomPrompt"
+            Placeholder="Ajoutez des instructions spécifiques pour la génération..." style="width: 100%;"
+            @onchange="OnChange" />
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public ContentDeclinationModel Model { get; set; } = new();
+
+    [Parameter]
+    public EventCallback OnOptionsChanged { get; set; }
+
+    private void SelectContentType(ContentType contentType)
+    {
+        Model.SelectedContentType = contentType;
+        OnChange();
+    }
+
+    private void SelectFormat(ContentFormat format)
+    {
+        Model.SelectedFormat = format;
+        OnChange();
+    }
+
+    private async Task OnChange()
+    {
+        await OnOptionsChanged.InvokeAsync();
+    }
+}
+
+<style>
+    .options-container {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .options-row {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .target-buttons,
+    .format-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    h4 {
+        margin: 0;
+    }
+</style>

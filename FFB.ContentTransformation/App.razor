@@ -1,0 +1,35 @@
+// App.razor
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="FFB.ContentTransformation.styles.css" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+
+</html>
+
+// _Imports.razor
+@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.FluentUI.AspNetCore.Components
+@using Microsoft.JSInterop
+@using FFB.ContentTransformation
+@using FFB.ContentTransformation.Components
+@using FFB.ContentTransformation.Components.Layout
+@using FFB.ContentTransformation.Components.Pages
+@using FFB.ContentTransformation.Components.Shared
+@using FFB.ContentTransformation.Data.Entities

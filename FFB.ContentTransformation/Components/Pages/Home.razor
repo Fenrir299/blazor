@@ -1,0 +1,58 @@
+﻿// Components/Pages/Home.razor
+@page "/"
+
+<PageTitle>Accueil - FFB POC</PageTitle>
+
+<FluentCard>
+    <h2>Bienvenue dans l'outil de démonstration FFB</h2>
+    <p>Cette application est un Proof of Concept (POC) développé pour la FFB, qui démontre les capacités des IA
+        génératives dans deux cas d'usage :</p>
+
+    <FluentDivider></FluentDivider>
+
+    <div class="use-cases">
+        <FluentCard Class="use-case-card">
+            <h3>1. Déclinaison de contenu</h3>
+            <p>Vulgariser, résumer, et adapter des contenus vers un format spécifique pour une cible donnée.</p>
+            <FluentButton Appearance="Appearance.Accent"
+                OnClick="@(() => NavigationManager.NavigateTo("content-declination"))">
+                Essayer
+            </FluentButton>
+        </FluentCard>
+
+        <FluentCard Class="use-case-card">
+            <h3>2. Recherche dans un corpus documentaire</h3>
+            <p>Faciliter la recherche d'informations dans un corpus de documents à l'aide d'un agent conversationnel.
+            </p>
+            <FluentButton Appearance="Appearance.Accent"
+                OnClick="@(() => NavigationManager.NavigateTo("document-search"))">
+                Essayer
+            </FluentButton>
+        </FluentCard>
+    </div>
+</FluentCard>
+
+@code {
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = default!;
+}
+
+<style>
+    .use-cases {
+        display: flex;
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .use-case-card {
+        flex: 1;
+        padding: 20px;
+    }
+
+    @media
+    (max-width: 768px) {
+        .use-cases {
+            flex-direction: column;
+        }
+    }
+</style>

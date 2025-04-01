@@ -1,0 +1,14 @@
+﻿// Components/Layout/NavMenu.razor
+@using Microsoft.FluentUI.AspNetCore.Components
+
+<FluentNavMenu Width="250" Collapsible="true" Title="FFB Content Tools">
+    <FluentNavLink Href="" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">
+        Accueil
+    </FluentNavLink>
+    <FluentNavLink Href="content-declination" Icon="@(new Icons.Regular.Size20.TextBulletListTree())">
+        Déclinaison de contenu
+    </FluentNavLink>
+    <FluentNavLink Href="document-search" Icon="@(new Icons.Regular.Size20.Search())">
+        Recherche corpus
+    </FluentNavLink>
+</FluentNavMenu>
