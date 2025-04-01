@@ -1,4 +1,3 @@
-// Components/Shared/ContentGenerationOptions.razor
 @using FFB.ContentTransformation.Data.Entities
 @using FFB.ContentTransformation.Models
 
@@ -45,16 +44,16 @@
     [Parameter]
     public EventCallback OnOptionsChanged { get; set; }
 
-    private void SelectContentType(ContentType contentType)
+    private async void SelectContentType(ContentType contentType)
     {
         Model.SelectedContentType = contentType;
-        OnChange();
+        await OnChange();
     }
 
-    private void SelectFormat(ContentFormat format)
+    private async void SelectFormat(ContentFormat format)
     {
         Model.SelectedFormat = format;
-        OnChange();
+        await OnChange();
     }
 
     private async Task OnChange()

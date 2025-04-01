@@ -1,4 +1,3 @@
-// Components/Pages/ContentDeclinationPage.razor
 @page "/content-declination"
 @using FFB.ContentTransformation.Data.Entities
 @using FFB.ContentTransformation.Models
@@ -23,7 +22,7 @@
         {
             <div class="mt-4">
                 <h4>Documents chargés</h4>
-                <FluentDataGrid Items="@Model.UploadedDocuments" TGridItem="Document">
+                <FluentDataGrid Items="@Model.UploadedDocuments.AsQueryable()" TGridItem="Document">
                     <PropertyColumn Title="Nom" Property="@(d => d.FileName)" />
                     <PropertyColumn Title="Type" Property="@(d => d.FileType)" />
                     <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
@@ -43,7 +42,7 @@
     {
         <div class="content-generation-section">
             <h3>2. Configurez la génération</h3>
-            <ContentGenerationOptions Model="@Model" OnOptionsChanged="HandleOptionsChanged" />
+            <ContentGenerationOptionsComponent Model="@Model" OnOptionsChanged="HandleOptionsChanged" />
 
             <div class="mt-4">
                 <FluentButton Appearance="Appearance.Accent" OnClick="GenerateContent" Disabled="@Model.IsProcessing">
@@ -69,7 +68,7 @@
 
             @if (!string.IsNullOrEmpty(Model.ErrorMessage))
             {
-                <FluentMessageBar Type="MessageBarType.Error">
+                <FluentMessageBar Type="MessageType.Notification" class="mt-3">
                     @Model.ErrorMessage
                 </FluentMessageBar>
             }

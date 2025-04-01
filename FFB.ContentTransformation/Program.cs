@@ -6,6 +6,7 @@ using FFB.ContentTransformation.Data;
 using FFB.ContentTransformation.Services.DocumentProcessing;
 using FFB.ContentTransformation.Services.AI;
 using FFB.ContentTransformation.Services.AI.ContentGeneration;
+using FFB.ContentTransformation.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,7 +57,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
-app.MapRazorComponents<App>()
+app.MapRazorComponents<FFB.ContentTransformation.Components.App>()
     .AddInteractiveServerRenderMode();
 
 // Ensure the database is created (for in-memory DB)
