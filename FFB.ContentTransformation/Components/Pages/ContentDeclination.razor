@@ -1,12 +1,17 @@
 @page "/content-declination"
+@using FFB.ContentTransformation.Data
 @using FFB.ContentTransformation.Data.Entities
 @using FFB.ContentTransformation.Models
 @using FFB.ContentTransformation.Services.DocumentProcessing
 @using FFB.ContentTransformation.Services.AI.ContentGeneration
 @using FFB.ContentTransformation.Services.ErrorHandling
+@using Microsoft.EntityFrameworkCore
 @inject IDocumentProcessingService DocumentProcessingService
 @inject IContentGenerationService ContentGenerationService
 @inject IErrorHandlingService ErrorHandlingService
+@inject IJSRuntime JSRuntime
+@inject ILogger<ContentDeclination> Logger
+@inject IServiceScopeFactory _serviceScopeFactory
 @rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 <PageTitle>Déclinaison de contenu - FFB POC</PageTitle>
 
@@ -24,14 +29,15 @@
         {
             <div class="mt-4">
                 <MultiDocumentSelector Documents="@Model.UploadedDocuments" Model="@Model"
-                    OnSelectionChanged="HandleDocumentSelectionChanged" />
+                    OnSelectionChanged="HandleDocumentSelectionChanged" OnSelectionConfirmed="HandleSelectionConfirmed"
+                    OnRefresh="RefreshDocuments" />
             </div>
         }
     </div>
 
-    @if (Model.SelectedDocuments.Any())
+    @if (ShowGenerationSection)
     {
-        <div class="content-generation-section">
+        <div class="content-generation-section" id="generation-section">
             <h3>2. Configurez la génération</h3>
             <ContentGenerationOptionsComponent Model="@Model" OnOptionsChanged="HandleOptionsChanged" />
 
@@ -69,22 +75,61 @@
 
 @code {
     private ContentDeclinationModel Model { get; set; } = new();
+    private bool ShowGenerationSection { get; set; } = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadDocumentsAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Si des documents étaient déjà sélectionnés (après rechargement de page)
+            ShowGenerationSection = Model.SelectedDocuments.Any();
+            if (ShowGenerationSection)
+            {
+                StateHasChanged();
+            }
+
+            // Ajouter la fonction JavaScript pour le défilement
+            await JSRuntime.InvokeVoidAsync("eval", @"
+window.scrollToElement = function(elementId) {
+const element = document.getElementById(elementId);
+if (element) {
+element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+}
+");
+        }
+    }
+
     private async Task LoadDocumentsAsync()
     {
         try
         {
-            // Dans une application réelle, on chargerait les documents depuis la base de données
-            // Pour l'instant, on va simplement initialiser une liste vide
-            Model.UploadedDocuments = new List<Document>();
+            Logger.LogInformation("Chargement des documents depuis la base de données");
+
+            // Dans une application réelle, chargez les documents depuis la base de données
+            // en utilisant un nouveau scope pour éviter les problèmes de contexte
+            using (var scope = _serviceScopeFactory.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                // Charger tous les documents non-supprimés
+                var documents = await dbContext.Documents
+                .Where(d => !d.IsDeleted)
+                .OrderByDescending(d => d.UploadedAt)
+                .ToListAsync();
+
+                Logger.LogInformation("Chargés {Count} documents depuis la base de données", documents.Count);
+                Model.UploadedDocuments = documents;
+            }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Erreur lors du chargement des documents");
             Model.ErrorMessage = $"Erreur lors du chargement des documents: {ex.Message}";
         }
     }
@@ -103,12 +148,44 @@
         StateHasChanged();
     }
 
+    private async Task HandleSelectionConfirmed()
+    {
+        if (Model.SelectedDocuments.Any())
+        {
+            ShowGenerationSection = true;
+            StateHasChanged();
+
+            // Défilement vers la section de génération après le rendu
+            await Task.Delay(100); // Court délai pour permettre le rendu
+            await JSRuntime.InvokeVoidAsync("scrollToElement", "generation-section");
+        }
+    }
+
     private void HandleOptionsChanged()
     {
         // Reset generated content when options change
         Model.GeneratedContent = null;
         StateHasChanged();
     }
+    // Dans ContentDeclination.razor, ajoutez cette méthode:
+
+    private async Task RefreshDocuments()
+    {
+        try
+        {
+            Logger.LogInformation("Rafraîchissement manuel des documents");
+            await LoadDocumentsAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Erreur lors du rafraîchissement des documents");
+            Model.ErrorMessage = $"Erreur lors du rafraîchissement : {ex.Message}";
+        }
+    }
+
+    // Et modifiez la manière dont vous rendez le composant MultiDocumentSelector:
+
 
     private async Task GenerateContent()
     {
@@ -189,32 +266,6 @@
 
         Model.IsProcessing = false;
         StateHasChanged();
-    }
-
-    private string FormatFileSize(long bytes)
-    {
-        string[] sizes = { "B", "KB", "MB", "GB" };
-        int order = 0;
-        double size = bytes;
-
-        while (size >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            size /= 1024;
-        }
-
-        return $"{size:0.##} {sizes[order]}";
-    }
-
-    private string GetProcessingStatus(Document document)
-    {
-        if (!document.ProcessingComplete && string.IsNullOrEmpty(document.ProcessingError))
-            return "En cours de traitement...";
-
-        if (!string.IsNullOrEmpty(document.ProcessingError))
-            return $"Erreur: {document.ProcessingError}";
-
-        return "Prêt";
     }
 }
 

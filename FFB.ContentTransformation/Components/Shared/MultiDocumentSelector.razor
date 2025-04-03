@@ -1,6 +1,8 @@
 @using FFB.ContentTransformation.Data.Entities
 @using FFB.ContentTransformation.Models
 @using FFB.ContentTransformation.Services.AI.ContentGeneration
+@inject ILogger<MultiDocumentSelector> Logger
+@implements IDisposable
 
 <div class="multi-document-selector">
     <h4>Sélection de documents</h4>
@@ -16,8 +18,33 @@
                 <PropertyColumn Title="Nom" Property="@(d => d.FileName)" />
                 <PropertyColumn Title="Type" Property="@(d => d.FileType)" />
                 <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
-                <PropertyColumn Title="Statut" Property="@(d => GetProcessingStatus(d))" />
+                <TemplateColumn Title="Statut">
+                    <div class="status-indicator @GetStatusClass(context)">
+                        @GetProcessingStatus(context)
+                    </div>
+                </TemplateColumn>
             </FluentDataGrid>
+
+            <div class="selection-confirmation mt-3">
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(!Model.SelectedDocumentIds.Any())"
+                    OnClick="@ConfirmSelection">
+                    Confirmer la sélection
+                </FluentButton>
+                <span class="selection-status ms-2">
+                    @(Model.SelectedDocumentIds.Any()
+                                    ? $"{Model.SelectedDocumentIds.Count} document(s) sélectionné(s)"
+                                    : "Aucun document sélectionné")
+            </span>
+        </div>
+
+        @if (HasProcessingDocuments)
+            {
+                <div class="auto-refresh-notice mt-2">
+                    <FluentButton Appearance="Appearance.Lightweight" OnClick="@RefreshDocuments">
+                        Rafraîchir l'état des documents
+                    </FluentButton>
+                </div>
+            }
         }
         else
         {
@@ -25,7 +52,7 @@
         }
     </div>
 
-    <div class="processing-options mt-4">
+    <div class="processing-options mt-4 @(ShowProcessingOptions ? "" : "d-none")">
         <h4>Options de traitement</h4>
 
         <div class="option-row">
@@ -56,6 +83,17 @@
     [Parameter]
     public EventCallback OnSelectionChanged { get; set; }
 
+    [Parameter]
+    public EventCallback OnSelectionConfirmed { get; set; }
+
+    [Parameter]
+    public EventCallback OnRefresh { get; set; }
+
+    private bool ShowProcessingOptions { get; set; } = false;
+    private bool HasProcessingDocuments => Documents.Any(d => !d.ProcessingComplete &&
+    string.IsNullOrEmpty(d.ProcessingError));
+    private bool _isDisposed = false;
+
     protected override void OnInitialized()
     {
         // Add IsSelected property to documents
@@ -63,6 +101,9 @@
         {
             doc.IsSelected = Model.SelectedDocumentIds.Contains(doc.Id);
         }
+
+        // Show processing options if documents are already selected
+        ShowProcessingOptions = Model.SelectedDocumentIds.Any();
     }
 
     private async Task ToggleDocumentSelection(Document document)
@@ -83,6 +124,24 @@
         Model.SelectedDocumentId = Model.SelectedDocumentIds.FirstOrDefault();
 
         await OnSelectionChanged.InvokeAsync();
+    }
+
+    private async Task ConfirmSelection()
+    {
+        if (Model.SelectedDocumentIds.Any())
+        {
+            ShowProcessingOptions = true;
+            await OnSelectionConfirmed.InvokeAsync();
+        }
+    }
+
+    private async Task RefreshDocuments()
+    {
+        if (_isDisposed)
+            return;
+
+        // Appeler l'événement de rafraîchissement
+        await OnRefresh.InvokeAsync();
     }
 
     private async Task UpdateMultiDocStrategy(MultiDocumentStrategy strategy)
@@ -116,6 +175,22 @@
 
         return "Prêt";
     }
+
+    private string GetStatusClass(Document document)
+    {
+        if (!document.ProcessingComplete && string.IsNullOrEmpty(document.ProcessingError))
+            return "status-processing";
+
+        if (!string.IsNullOrEmpty(document.ProcessingError))
+            return "status-error";
+
+        return "status-ready";
+    }
+
+    public void Dispose()
+    {
+        _isDisposed = true;
+    }
 }
 
 <style>
@@ -145,7 +220,58 @@
         gap: 10px;
     }
 
+    .mt-3 {
+        margin-top: 0.75rem;
+    }
+
     .mt-4 {
         margin-top: 1rem;
+    }
+
+    .mt-2 {
+        margin-top: 0.5rem;
+    }
+
+    .ms-2 {
+        margin-left: 0.5rem;
+    }
+
+    .d-none {
+        display: none;
+    }
+
+    .selection-confirmation {
+        display: flex;
+        align-items: center;
+        margin-top: 1rem;
+    }
+
+    .selection-status {
+        color: #666;
+    }
+
+    .status-indicator {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.875rem;
+    }
+
+    .status-processing {
+        background-color: #FFF4CD;
+        color: #856404;
+    }
+
+    .status-error {
+        background-color: #F8D7DA;
+        color: #721C24;
+    }
+
+    .status-ready {
+        background-color: #D4EDDA;
+        color: #155724;
+    }
+
+    .auto-refresh-notice {
+        margin-top: 0.75rem;
     }
 </style>

@@ -83,11 +83,11 @@
         await JSRuntime.InvokeVoidAsync("scrollToBottom", "chat-messages");
     }
     
-    private void HandleKeyDown(KeyboardEventArgs e)
+    private async void HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(CurrentMessage) && !IsProcessing)
         {
-            SendMessage();
+           await SendMessage();
         }
     }
     

@@ -32,5 +32,8 @@ namespace FFB.ContentTransformation.Data.Entities
         public bool ProcessingComplete { get; set; } = false;
 
         public string? ProcessingError { get; set; }
+
+        // Propriété pour marquer les documents comme supprimés (soft delete)
+        public bool IsDeleted { get; set; } = false;
     }
 }

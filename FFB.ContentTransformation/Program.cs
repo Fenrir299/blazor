@@ -33,22 +33,22 @@ builder.Services.AddDbContextPool<AppDbContext>(options =>
     */
 });
 
-// Register services
-builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
-builder.Services.AddScoped<DocumentTextExtractor>();
-builder.Services.AddScoped<IAIService, AzureOpenAIService>();  // Real Azure OpenAI service
-builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
-builder.Services.AddScoped<FFB.ContentTransformation.Services.ErrorHandling.IErrorHandlingService, FFB.ContentTransformation.Services.ErrorHandling.ErrorHandlingService>();
-
-// Add Http client for Azure OpenAI
-builder.Services.AddHttpClient();
-
 // Add logging
 builder.Services.AddLogging(logging =>
 {
     logging.AddConsole();
     logging.AddDebug();
 });
+
+// Register services
+builder.Services.AddScoped<DocumentTextExtractor>();
+builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
+builder.Services.AddScoped<IAIService, AzureOpenAIService>();  // Real Azure OpenAI service
+builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
+builder.Services.AddScoped<FFB.ContentTransformation.Services.ErrorHandling.IErrorHandlingService, FFB.ContentTransformation.Services.ErrorHandling.ErrorHandlingService>();
+
+// Add Http client for Azure OpenAI
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 

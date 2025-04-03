@@ -33,25 +33,45 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
 
         public async Task<string> ExtractTextAsync(Data.Entities.Document document)
         {
+            _logger.LogInformation("Document {DocumentId}: Démarrage de l'extraction de texte pour le fichier {FileName}",
+                document.Id, document.FileName);
+
             var filePath = Path.Combine(_environment.WebRootPath, "uploads", document.StoragePath);
 
             if (!File.Exists(filePath))
             {
-                throw new FileNotFoundException($"File {filePath} not found");
+                _logger.LogError("Document {DocumentId}: Fichier non trouvé {FilePath}", document.Id, filePath);
+                throw new FileNotFoundException($"Fichier {filePath} non trouvé");
             }
 
+            _logger.LogInformation("Document {DocumentId}: Détection du type de fichier {FileType}",
+                document.Id, document.FileType);
+
             var extension = Path.GetExtension(document.FileName).ToLowerInvariant();
+            string extractedText;
 
-            return extension switch
+            try
             {
-                ".pdf" => await ExtractTextFromPdfAsync(filePath),
-                ".docx" => await ExtractTextFromDocxAsync(filePath),
-                ".txt" => await ReadTextFileWithSharingAsync(filePath),
-                // Pour les autres types de fichiers, nous utiliserons une extraction simple
-                _ => "Unsupported file type for text extraction"
-            };
-        }
+                extractedText = extension switch
+                {
+                    ".pdf" => await ExtractTextFromPdfAsync(filePath),
+                    ".docx" => await ExtractTextFromDocxAsync(filePath),
+                    ".txt" => await ReadTextFileWithSharingAsync(filePath),
+                    // Pour les autres types de fichiers, nous utiliserons une extraction simple
+                    _ => "Type de fichier non pris en charge pour l'extraction de texte"
+                };
 
+                _logger.LogInformation("Document {DocumentId}: Extraction terminée, {TextLength} caractères extraits",
+                    document.Id, extractedText?.Length ?? 0);
+
+                return extractedText ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Document {DocumentId}: Erreur lors de l'extraction de texte", document.Id);
+                throw new Exception($"Erreur lors de l'extraction de texte: {ex.Message}", ex);
+            }
+        }
         private async Task<string> ReadTextFileWithSharingAsync(string filePath)
         {
             try
