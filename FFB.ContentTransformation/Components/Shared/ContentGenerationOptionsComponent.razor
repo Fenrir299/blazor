@@ -44,16 +44,30 @@
     [Parameter]
     public EventCallback OnOptionsChanged { get; set; }
 
-    private async void SelectContentType(ContentType contentType)
+    private async Task SelectContentType(ContentType contentType)
     {
-        Model.SelectedContentType = contentType;
-        await OnChange();
+        try
+        {
+            Model.SelectedContentType = contentType;
+            await OnChange();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in SelectContentType: {ex.Message}");
+        }
     }
 
-    private async void SelectFormat(ContentFormat format)
+    private async Task SelectFormat(ContentFormat format)
     {
-        Model.SelectedFormat = format;
-        await OnChange();
+        try
+        {
+            Model.SelectedFormat = format;
+            await OnChange();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error in SelectFormat: {ex.Message}");
+        }
     }
 
     private async Task OnChange()

@@ -5,7 +5,7 @@
 @using FFB.ContentTransformation.Services.AI.ContentGeneration
 @inject IDocumentProcessingService DocumentProcessingService
 @inject IContentGenerationService ContentGenerationService
-
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 <PageTitle>Déclinaison de contenu - FFB POC</PageTitle>
 
 <h2>Déclinaison de contenu</h2>
@@ -28,7 +28,7 @@
                     <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
                     <PropertyColumn Title="Statut" Property="@(d => GetProcessingStatus(d))" />
                     <TemplateColumn Title="Actions">
-                        <FluentButton OnClick="@(() => SelectDocument(context))"
+                        <FluentButton OnClick="(e) => SelectDocument(context)"
                             Disabled="@(!context.ProcessingComplete || !string.IsNullOrEmpty(context.ProcessingError))">
                             Sélectionner
                         </FluentButton>
@@ -79,11 +79,10 @@
 @code {
     private ContentDeclinationModel Model { get; set; } = new();
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
-        await LoadDocumentsAsync();
+        return LoadDocumentsAsync();
     }
-
     private async Task LoadDocumentsAsync()
     {
         try
@@ -291,7 +290,9 @@ La Direction";
 
         return "Prêt";
     }
+
 }
+
 
 <style>
     .content-declination-container {
