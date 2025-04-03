@@ -3,8 +3,11 @@
 @using FFB.ContentTransformation.Models
 @using FFB.ContentTransformation.Services.DocumentProcessing
 @using FFB.ContentTransformation.Services.AI.ContentGeneration
+@using FFB.ContentTransformation.Services.ErrorHandling
+@using Microsoft.FluentUI.AspNetCore.Components
 @inject IDocumentProcessingService DocumentProcessingService
 @inject IContentGenerationService ContentGenerationService
+@inject IErrorHandlingService ErrorHandlingService
 @rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 <PageTitle>Déclinaison de contenu - FFB POC</PageTitle>
 
@@ -22,13 +25,13 @@
         {
             <div class="mt-4">
                 <h4>Documents chargés</h4>
-                <FluentDataGrid Items="@Model.UploadedDocuments.AsQueryable()" TGridItem="Document">
+                <FluentDataGrid Items="@Model.UploadedDocuments.AsQueryable()" TGridItem="Document" class="documents-grid">
                     <PropertyColumn Title="Nom" Property="@(d => d.FileName)" />
                     <PropertyColumn Title="Type" Property="@(d => d.FileType)" />
                     <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
                     <PropertyColumn Title="Statut" Property="@(d => GetProcessingStatus(d))" />
                     <TemplateColumn Title="Actions">
-                        <FluentButton OnClick="(e) => SelectDocument(context)"
+                        <FluentButton OnClick="@(() => SelectDocument(context))"
                             Disabled="@(!context.ProcessingComplete || !string.IsNullOrEmpty(context.ProcessingError))">
                             Sélectionner
                         </FluentButton>
@@ -62,13 +65,13 @@
             {
                 <div class="mt-4">
                     <h3>3. Contenu généré</h3>
-                    <GeneratedContentDisplay Content="@Model.GeneratedContent" />
+                    <GeneratedContentDisplay Content="@Model.GeneratedContent" ContentType="@Model.SelectedContentType" />
                 </div>
             }
 
             @if (!string.IsNullOrEmpty(Model.ErrorMessage))
             {
-                <FluentMessageBar Type="MessageType.Notification" class="mt-3">
+                <FluentMessageBar class="mt-3">
                     @Model.ErrorMessage
                 </FluentMessageBar>
             }
@@ -79,39 +82,18 @@
 @code {
     private ContentDeclinationModel Model { get; set; } = new();
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
-        return LoadDocumentsAsync();
+        await LoadDocumentsAsync();
     }
+
     private async Task LoadDocumentsAsync()
     {
         try
         {
-            // For a POC, we'll use sample data
-            // In a real application, this would fetch documents from the database
-            Model.UploadedDocuments = new List<Document>
-{
-new()
-{
-Id = 1,
-FileName = "FFB - OnePoint - Proposition commerciale 2025.03.21 V3.pdf",
-FileType = "application/pdf",
-FileSize = 250000,
-UploadedAt = DateTime.Now.AddDays(-1),
-ProcessingComplete = true,
-StoragePath = "sample1.pdf"
-},
-new()
-{
-Id = 2,
-FileName = "Composants IHM",
-FileType = "text/plain",
-FileSize = 5000,
-UploadedAt = DateTime.Now.AddHours(-2),
-ProcessingComplete = true,
-StoragePath = "sample2.txt"
-}
-};
+            // Dans une application réelle, on chargerait les documents depuis la base de données
+            // Pour l'instant, on va simplement initialiser une liste vide
+            Model.UploadedDocuments = new List<Document>();
         }
         catch (Exception ex)
         {
@@ -148,121 +130,50 @@ StoragePath = "sample2.txt"
             return;
         }
 
-        try
+        Model.IsProcessing = true;
+        Model.ErrorMessage = null;
+        StateHasChanged();
+
+        var options = new ContentGenerationOptions
         {
-            Model.IsProcessing = true;
-            Model.ErrorMessage = null;
-            StateHasChanged();
+            ContentType = Model.SelectedContentType,
+            Format = Model.SelectedFormat,
+            CustomPrompt = Model.CustomPrompt
+        };
 
-            var options = new ContentGenerationOptions
+        // Utiliser le service de gestion des erreurs pour la génération de contenu
+        var generationResult = await ErrorHandlingService.ExecuteAsync(
+        async () => await ContentGenerationService.GenerateContentAsync(Model.SelectedDocument, options),
+        "content_generation"
+        );
+
+        if (generationResult.IsSuccess && generationResult.Data != null)
+        {
+            Model.GeneratedContent = generationResult.Data;
+
+            // Sauvegarder le contenu généré
+            var saveResult = await ErrorHandlingService.ExecuteAsync(
+            async () => await ContentGenerationService.SaveGeneratedContentAsync(
+            Model.SelectedDocument,
+            Model.GeneratedContent,
+            options
+            ),
+            "save_generated_content"
+            );
+
+            if (!saveResult.IsSuccess)
             {
-                ContentType = Model.SelectedContentType,
-                Format = Model.SelectedFormat,
-                CustomPrompt = Model.CustomPrompt
-            };
-
-            // For POC purposes, we'll use mock data for certain document IDs
-            if (Model.SelectedDocumentId == 1)
-            {
-                // Simulate generation for the proposal document
-                await Task.Delay(2000); // Simulate processing time
-
-                Model.GeneratedContent = GetSampleGeneratedContent(options);
+                // Afficher un avertissement si la sauvegarde a échoué, mais ne pas bloquer l'affichage du contenu
+                Model.ErrorMessage = $"Le contenu a été généré mais n'a pas pu être sauvegardé: {saveResult.ErrorMessage}";
             }
-            else
-            {
-                // Real generation through the service for other documents
-                Model.GeneratedContent = await ContentGenerationService.GenerateContentAsync(
-                Model.SelectedDocument,
-                options
-                );
-            }
         }
-        catch (Exception ex)
+        else
         {
-            Model.ErrorMessage = $"Erreur lors de la génération: {ex.Message}";
+            Model.ErrorMessage = generationResult.ErrorMessage ?? "Une erreur inconnue s'est produite lors de la génération.";
         }
-        finally
-        {
-            Model.IsProcessing = false;
-            StateHasChanged();
-        }
-    }
 
-    private string GetSampleGeneratedContent(ContentGenerationOptions options)
-    {
-        // Sample content based on options for demo purposes
-        if (options.ContentType == ContentType.WebArticle)
-        {
-            return @"# La FFB s'engage dans la révolution de l'IA générative
-
-## Un partenariat prometteur avec OnePoint
-
-La Fédération Française du Bâtiment (FFB) franchit une étape décisive dans sa transformation numérique en s'associant
-avec OnePoint pour explorer les potentialités des intelligences artificielles génératives. Cette initiative s'articule
-autour de deux cas d'usage concrets qui promettent d'améliorer significativement l'efficacité opérationnelle des
-équipes.
-
-## Deux cas d'usage innovants
-
-Le premier prototype vise à transformer des contenus techniques en formats adaptés à différentes cibles. Qu'il s'agisse
-de vulgariser des informations complexes ou de les reformater pour différents canaux de communication (articles web,
-posts LinkedIn ou emails), cette solution permettra un gain de temps considérable pour les équipes de communication.
-
-Le second cas d'usage concerne la recherche intelligente dans un corpus documentaire. Grâce à un agent conversationnel,
-les collaborateurs pourront rapidement accéder aux informations pertinentes disséminées dans de nombreux documents.
-
-## Une approche pragmatique
-
-Le projet adopte une méthodologie agile avec une phase de prototypage rapide permettant d'évaluer concrètement la valeur
-ajoutée de ces technologies avant d'envisager une industrialisation plus large.
-
-Cette démarche innovante illustre la volonté de la FFB de conjuguer expertise métier et technologies de pointe pour
-mieux servir ses adhérents et optimiser ses processus internes.";
-        }
-        else if (options.ContentType == ContentType.LinkedInPost)
-        {
-            return @"Fière d'annoncer notre collaboration avec OnePoint pour intégrer l'IA générative dans nos processus ! 🚀
-
-Nous lançons deux prototypes innovants :
-✅ Un outil de transformation de contenus qui adapte automatiquement nos documents techniques pour différents formats et
-audiences
-✅ Un assistant de recherche intelligent pour exploiter efficacement notre base documentaire
-
-Cette initiative s'inscrit dans notre stratégie de transformation digitale pour gagner en efficacité opérationnelle et
-mieux servir nos adhérents.
-
-Premiers résultats attendus en mai 2025. Restez connectés !
-
-#Innovation #IntelligenceArtificielle #Bâtiment #Digitalisation #TransformationNumérique";
-        }
-        else // Email
-        {
-            return @"Objet : Lancement de notre projet d'IA générative avec OnePoint
-
-Chers collaborateurs,
-
-J'ai le plaisir de vous annoncer le lancement de notre projet d'expérimentation des technologies d'intelligence
-artificielle générative, en partenariat avec le cabinet OnePoint.
-
-Notre fédération s'engage ainsi dans une démarche innovante visant à simplifier notre quotidien et à gagner en
-efficacité opérationnelle. Deux cas d'usage ont été identifiés pour cette phase pilote :
-
-1. La déclinaison automatique de contenus : ce prototype nous permettra de vulgariser, résumer et adapter nos documents
-techniques vers différents formats (articles web, posts LinkedIn, emails) en fonction des audiences ciblées.
-
-2. La recherche intelligente dans notre corpus documentaire : un agent conversationnel nous aidera à localiser
-rapidement les informations pertinentes au sein de notre base documentaire.
-
-Le planning prévoit un déploiement progressif sur les mois d'avril et mai 2025, avec une première mise à disposition des
-outils prévue mi-mai.
-
-Je vous invite à partager vos questions ou suggestions concernant ce projet auprès de l'équipe digitale.
-
-Cordialement,
-
-La Direction";
-        }
+        Model.IsProcessing = false;
+        StateHasChanged();
     }
 
     private string FormatFileSize(long bytes)
@@ -290,9 +201,7 @@ La Direction";
 
         return "Prêt";
     }
-
 }
-
 
 <style>
     .content-declination-container {
@@ -308,11 +217,20 @@ La Direction";
         border-radius: 5px;
     }
 
+    .documents-grid {
+        width: 100%;
+        margin-top: 10px;
+    }
+
     .mt-4 {
         margin-top: 1rem;
     }
 
     .ms-2 {
         margin-left: 0.5rem;
+    }
+
+    .mt-3 {
+        margin-top: 0.75rem;
     }
 </style>

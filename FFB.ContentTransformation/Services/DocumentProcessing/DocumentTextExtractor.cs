@@ -3,12 +3,15 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using FFB.ContentTransformation.Data.Entities;
 using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
 using iText.Kernel.Pdf.Canvas.Parser.Listener;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace FFB.ContentTransformation.Services.DocumentProcessing
 {
@@ -28,7 +31,7 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
             _logger = logger;
         }
 
-        public async Task<string> ExtractTextAsync(Document document)
+        public async Task<string> ExtractTextAsync(Data.Entities.Document document)
         {
             var filePath = Path.Combine(_environment.WebRootPath, "uploads", document.StoragePath);
 
@@ -42,11 +45,31 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
             return extension switch
             {
                 ".pdf" => await ExtractTextFromPdfAsync(filePath),
-                ".txt" => await File.ReadAllTextAsync(filePath),
-                // For demo purposes, we'll use simple text extraction for other file types
-                // In a production environment, we would use Azure Document Intelligence for more accuracy
+                ".docx" => await ExtractTextFromDocxAsync(filePath),
+                ".txt" => await ReadTextFileWithSharingAsync(filePath),
+                // Pour les autres types de fichiers, nous utiliserons une extraction simple
                 _ => "Unsupported file type for text extraction"
             };
+        }
+
+        private async Task<string> ReadTextFileWithSharingAsync(string filePath)
+        {
+            try
+            {
+                // Utilisation de FileShare.ReadWrite pour permettre l'accès concurrent
+                using var fileStream = new FileStream(
+                    filePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+                using var reader = new StreamReader(fileStream, Encoding.UTF8);
+                return await reader.ReadToEndAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading text file: {FilePath}", filePath);
+                return $"Error extracting text: {ex.Message}";
+            }
         }
 
         private async Task<string> ExtractTextFromPdfAsync(string filePath)
@@ -59,7 +82,13 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
             {
                 try
                 {
-                    using var pdfReader = new PdfReader(filePath);
+                    // Utilisation de FileShare.ReadWrite pour permettre l'accès concurrent
+                    using var fileStream = new FileStream(
+                        filePath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite);
+                    using var pdfReader = new PdfReader(fileStream);
                     using var pdfDocument = new PdfDocument(pdfReader);
 
                     for (int i = 1; i <= pdfDocument.GetNumberOfPages(); i++)
@@ -78,6 +107,92 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
                     return $"Error extracting text: {ex.Message}";
                 }
             });
+        }
+
+        private async Task<string> ExtractTextFromDocxAsync(string filePath)
+        {
+            return await Task.Run(() =>
+            {
+                var text = new StringBuilder();
+                try
+                {
+                    // Utilisation de FileShare.ReadWrite pour permettre l'accès concurrent
+                    using var fileStream = new FileStream(
+                        filePath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite);
+
+                    using var wordDocument = WordprocessingDocument.Open(fileStream, false);
+
+                    // Extraire le texte du document principal
+                    if (wordDocument.MainDocumentPart != null)
+                    {
+                        var docText = ExtractTextFromWordDocumentPart(wordDocument.MainDocumentPart);
+                        text.Append(docText);
+                    }
+
+                    // Extraire le texte des en-têtes et pieds de page
+                    if (wordDocument.MainDocumentPart?.HeaderParts != null)
+                    {
+                        foreach (var headerPart in wordDocument.MainDocumentPart.HeaderParts)
+                        {
+                            var headerText = ExtractTextFromWordDocumentPart(headerPart);
+                            if (!string.IsNullOrWhiteSpace(headerText))
+                            {
+                                text.Append("Header: ").AppendLine(headerText);
+                            }
+                        }
+                    }
+
+                    if (wordDocument.MainDocumentPart?.FooterParts != null)
+                    {
+                        foreach (var footerPart in wordDocument.MainDocumentPart.FooterParts)
+                        {
+                            var footerText = ExtractTextFromWordDocumentPart(footerPart);
+                            if (!string.IsNullOrWhiteSpace(footerText))
+                            {
+                                text.Append("Footer: ").AppendLine(footerText);
+                            }
+                        }
+                    }
+
+                    return text.ToString();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error extracting text from DOCX: {FilePath}", filePath);
+                    return $"Error extracting text: {ex.Message}";
+                }
+            });
+        }
+
+        private string ExtractTextFromWordDocumentPart(OpenXmlPart part)
+        {
+            var stringBuilder = new StringBuilder();
+
+            if (part.RootElement != null)
+            {
+                // Parcourir tous les éléments de type Text et ajouter leur contenu textuel
+                foreach (var text in part.RootElement.Descendants<Text>())
+                {
+                    stringBuilder.Append(text.Text);
+                }
+
+                // Parcourir tous les éléments de type Break et ajouter des sauts de ligne
+                foreach (var br in part.RootElement.Descendants<Break>())
+                {
+                    stringBuilder.AppendLine();
+                }
+
+                // Parcourir tous les paragraphes pour ajouter des sauts de ligne entre eux
+                foreach (var paragraph in part.RootElement.Descendants<Paragraph>())
+                {
+                    stringBuilder.AppendLine();
+                }
+            }
+
+            return stringBuilder.ToString();
         }
     }
 }

@@ -60,6 +60,7 @@ namespace FFB.ContentTransformation.Services.AI.ContentGeneration
 
             // If text is too long, truncate it to a reasonable length
             var truncatedText = documentText.Length > 6000 ? documentText.Substring(0, 6000) + "..." : documentText;
+            _logger.LogInformation("Document text (truncated): {TruncatedText}", truncatedText);
 
             // Add custom instructions based on content type
             sb.AppendLine($"Transforme le texte suivant en {GetContentTypeDescription(options.ContentType)}.");

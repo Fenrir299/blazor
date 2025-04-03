@@ -20,11 +20,10 @@ builder.Services.AddFluentUIComponents();
 // Configure database context
 builder.Services.AddDbContextPool<AppDbContext>(options =>
 {
-    // For POC/development, we'll use an in-memory database
-    // In production, use PostgreSQL
+    // For development, we'll use an in-memory database
     options.UseInMemoryDatabase("FFBContentDb");
 
-    // Uncomment the following for a real database connection
+    // For production, use PostgreSQL - uncomment the following
     /*
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), npgsqlOptions =>
     {
@@ -37,11 +36,19 @@ builder.Services.AddDbContextPool<AppDbContext>(options =>
 // Register services
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<DocumentTextExtractor>();
-builder.Services.AddScoped<IAIService, AzureOpenAIService>();
+builder.Services.AddScoped<IAIService, AzureOpenAIService>();  // Real Azure OpenAI service
 builder.Services.AddScoped<IContentGenerationService, ContentGenerationService>();
+builder.Services.AddScoped<FFB.ContentTransformation.Services.ErrorHandling.IErrorHandlingService, FFB.ContentTransformation.Services.ErrorHandling.ErrorHandlingService>();
+
+// Add Http client for Azure OpenAI
+builder.Services.AddHttpClient();
 
 // Add logging
-builder.Services.AddLogging();
+builder.Services.AddLogging(logging =>
+{
+    logging.AddConsole();
+    logging.AddDebug();
+});
 
 var app = builder.Build();
 

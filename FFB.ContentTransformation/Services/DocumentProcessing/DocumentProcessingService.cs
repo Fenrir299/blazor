@@ -48,10 +48,8 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
                 var uniqueFileName = $"{Guid.NewGuid()}{Path.GetExtension(file.Name)}";
                 var filePath = Path.Combine(uploadsPath, uniqueFileName);
 
-                // Save the file
-                await using var fileStream = new FileStream(filePath, FileMode.Create);
-                await file.OpenReadStream(maxAllowedSize: 10485760) // 10MB max
-                    .CopyToAsync(fileStream);
+                // Save the file with a retry mechanism
+                await SaveFileWithRetryAsync(file, filePath);
 
                 // Create document record
                 var document = new Document
@@ -68,7 +66,8 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
                 await _dbContext.SaveChangesAsync();
 
                 // Extract text asynchronously
-                _ = ExtractAndUpdateTextAsync(document);
+                // Utiliser Task.Run pour éviter de bloquer le thread UI
+                _ = Task.Run(async () => await ExtractAndUpdateTextAsync(document));
 
                 return document;
             }
@@ -76,6 +75,46 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
             {
                 _logger.LogError(ex, "Error uploading document {FileName}", file.Name);
                 throw;
+            }
+        }
+
+        private async Task SaveFileWithRetryAsync(IBrowserFile file, string filePath, int maxRetries = 3)
+        {
+            int retryCount = 0;
+            bool success = false;
+
+            while (!success && retryCount < maxRetries)
+            {
+                try
+                {
+                    // Utiliser FileShare.None pour indiquer que nous avons besoin d'un accès exclusif
+                    await using var fileStream = new FileStream(
+                        filePath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None);
+
+                    await file.OpenReadStream(maxAllowedSize: 10485760) // 10MB max
+                        .CopyToAsync(fileStream);
+
+                    // S'assurer que le fileStream est correctement fermé
+                    await fileStream.FlushAsync();
+                    fileStream.Close();
+
+                    success = true;
+                }
+                catch (IOException ex)
+                {
+                    retryCount++;
+                    if (retryCount >= maxRetries)
+                    {
+                        _logger.LogError(ex, "Failed to save file after {RetryCount} attempts", retryCount);
+                        throw;
+                    }
+
+                    _logger.LogWarning(ex, "Retry {RetryCount}/{MaxRetries} saving file", retryCount, maxRetries);
+                    await Task.Delay(100 * retryCount); // Backoff exponentiel
+                }
             }
         }
 
@@ -93,6 +132,9 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
         {
             try
             {
+                // Ajouter un délai pour s'assurer que le fichier est bien fermé avant d'essayer de l'extraire
+                await Task.Delay(500);
+
                 var text = await _textExtractor.ExtractTextAsync(document);
 
                 document.ExtractedText = text;
@@ -126,7 +168,8 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
                 var filePath = Path.Combine(_environment.WebRootPath, "uploads", document.StoragePath);
                 if (File.Exists(filePath))
                 {
-                    File.Delete(filePath);
+                    // Tentative de suppression avec une méthode robuste
+                    await DeleteFileWithRetryAsync(filePath);
                 }
 
                 // Delete from database
@@ -137,6 +180,33 @@ namespace FFB.ContentTransformation.Services.DocumentProcessing
             {
                 _logger.LogError(ex, "Error deleting document {DocumentId}", documentId);
                 throw;
+            }
+        }
+
+        private async Task DeleteFileWithRetryAsync(string filePath, int maxRetries = 3)
+        {
+            int retryCount = 0;
+            bool success = false;
+
+            while (!success && retryCount < maxRetries)
+            {
+                try
+                {
+                    File.Delete(filePath);
+                    success = true;
+                }
+                catch (IOException ex)
+                {
+                    retryCount++;
+                    if (retryCount >= maxRetries)
+                    {
+                        _logger.LogError(ex, "Failed to delete file after {RetryCount} attempts", retryCount);
+                        throw;
+                    }
+
+                    _logger.LogWarning(ex, "Retry {RetryCount}/{MaxRetries} deleting file", retryCount, maxRetries);
+                    await Task.Delay(100 * retryCount); // Backoff exponentiel
+                }
             }
         }
     }
