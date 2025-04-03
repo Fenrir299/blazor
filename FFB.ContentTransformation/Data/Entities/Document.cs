@@ -7,7 +7,7 @@ namespace FFB.ContentTransformation.Data.Entities
     /// <summary>
     /// Represents a document uploaded to the system
     /// </summary>
-    public class Document
+    public partial class Document
     {
         [Key]
         public int Id { get; set; }

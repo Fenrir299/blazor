@@ -1,0 +1,151 @@
+@using FFB.ContentTransformation.Data.Entities
+@using FFB.ContentTransformation.Models
+@using FFB.ContentTransformation.Services.AI.ContentGeneration
+
+<div class="multi-document-selector">
+    <h4>Sélection de documents</h4>
+
+    <div class="documents-list">
+        @if (Documents.Any())
+        {
+            <FluentDataGrid Items="@Documents.AsQueryable()" TGridItem="Document" class="documents-grid">
+                <TemplateColumn Title="">
+                    <FluentCheckbox @bind-Value="@context.IsSelected"
+                        OnChange="@(() => ToggleDocumentSelection(context))" />
+                </TemplateColumn>
+                <PropertyColumn Title="Nom" Property="@(d => d.FileName)" />
+                <PropertyColumn Title="Type" Property="@(d => d.FileType)" />
+                <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
+                <PropertyColumn Title="Statut" Property="@(d => GetProcessingStatus(d))" />
+            </FluentDataGrid>
+        }
+        else
+        {
+            <p>Aucun document disponible. Veuillez charger des documents.</p>
+        }
+    </div>
+
+    <div class="processing-options mt-4">
+        <h4>Options de traitement</h4>
+
+        <div class="option-row">
+            <span>Stratégie multi-documents:</span>
+            <FluentRadioGroup TValue="MultiDocumentStrategy" Value="@Model.MultiDocStrategy"
+                ValueChanged="@(v => UpdateMultiDocStrategy(v))">
+                <FluentRadio Value="@MultiDocumentStrategy.Combine">Combiner tous les documents</FluentRadio>
+                <FluentRadio Value="@MultiDocumentStrategy.ProcessSeparately">Traiter séparément puis combiner
+                </FluentRadio>
+                <FluentRadio Value="@MultiDocumentStrategy.SummarizeThenCombine">Résumer puis combiner</FluentRadio>
+            </FluentRadioGroup>
+        </div>
+
+        <div class="option-row">
+            <FluentCheckbox @bind-Value="@Model.UseChunking"
+                Label="Découper automatiquement les documents volumineux" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Document> Documents { get; set; } = new();
+
+    [Parameter]
+    public ContentDeclinationModel Model { get; set; } = new();
+
+    [Parameter]
+    public EventCallback OnSelectionChanged { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Add IsSelected property to documents
+        foreach (var doc in Documents)
+        {
+            doc.IsSelected = Model.SelectedDocumentIds.Contains(doc.Id);
+        }
+    }
+
+    private async Task ToggleDocumentSelection(Document document)
+    {
+        if (document.IsSelected)
+        {
+            if (!Model.SelectedDocumentIds.Contains(document.Id))
+            {
+                Model.SelectedDocumentIds.Add(document.Id);
+            }
+        }
+        else
+        {
+            Model.SelectedDocumentIds.Remove(document.Id);
+        }
+
+        // Update primary selected document for backward compatibility
+        Model.SelectedDocumentId = Model.SelectedDocumentIds.FirstOrDefault();
+
+        await OnSelectionChanged.InvokeAsync();
+    }
+
+    private async Task UpdateMultiDocStrategy(MultiDocumentStrategy strategy)
+    {
+        Model.MultiDocStrategy = strategy;
+        await OnSelectionChanged.InvokeAsync();
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+
+        return $"{size:0.##} {sizes[order]}";
+    }
+
+    private string GetProcessingStatus(Document document)
+    {
+        if (!document.ProcessingComplete && string.IsNullOrEmpty(document.ProcessingError))
+            return "En cours de traitement...";
+
+        if (!string.IsNullOrEmpty(document.ProcessingError))
+            return $"Erreur: {document.ProcessingError}";
+
+        return "Prêt";
+    }
+}
+
+<style>
+    .multi-document-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .documents-grid {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .processing-options {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background-color: #f0f5ff;
+        padding: 15px;
+        border-radius: 5px;
+    }
+
+    .option-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .mt-4 {
+        margin-top: 1rem;
+    }
+</style>

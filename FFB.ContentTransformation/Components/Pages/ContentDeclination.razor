@@ -4,7 +4,6 @@
 @using FFB.ContentTransformation.Services.DocumentProcessing
 @using FFB.ContentTransformation.Services.AI.ContentGeneration
 @using FFB.ContentTransformation.Services.ErrorHandling
-@using Microsoft.FluentUI.AspNetCore.Components
 @inject IDocumentProcessingService DocumentProcessingService
 @inject IContentGenerationService ContentGenerationService
 @inject IErrorHandlingService ErrorHandlingService
@@ -18,30 +17,19 @@
 
 <div class="content-declination-container">
     <div class="file-upload-section">
-        <h3>1. Chargez votre document</h3>
+        <h3>1. Chargez vos documents</h3>
         <FileUploader OnDocumentUploaded="HandleDocumentUploaded" />
 
         @if (Model.UploadedDocuments.Any())
         {
             <div class="mt-4">
-                <h4>Documents chargés</h4>
-                <FluentDataGrid Items="@Model.UploadedDocuments.AsQueryable()" TGridItem="Document" class="documents-grid">
-                    <PropertyColumn Title="Nom" Property="@(d => d.FileName)" />
-                    <PropertyColumn Title="Type" Property="@(d => d.FileType)" />
-                    <PropertyColumn Title="Taille" Property="@(d => FormatFileSize(d.FileSize))" />
-                    <PropertyColumn Title="Statut" Property="@(d => GetProcessingStatus(d))" />
-                    <TemplateColumn Title="Actions">
-                        <FluentButton OnClick="@(() => SelectDocument(context))"
-                            Disabled="@(!context.ProcessingComplete || !string.IsNullOrEmpty(context.ProcessingError))">
-                            Sélectionner
-                        </FluentButton>
-                    </TemplateColumn>
-                </FluentDataGrid>
+                <MultiDocumentSelector Documents="@Model.UploadedDocuments" Model="@Model"
+                    OnSelectionChanged="HandleDocumentSelectionChanged" />
             </div>
         }
     </div>
 
-    @if (Model.SelectedDocument != null)
+    @if (Model.SelectedDocuments.Any())
     {
         <div class="content-generation-section">
             <h3>2. Configurez la génération</h3>
@@ -107,11 +95,11 @@
         StateHasChanged();
     }
 
-    private void SelectDocument(Document document)
+    private void HandleDocumentSelectionChanged()
     {
-        Model.SelectedDocumentId = document.Id;
-        Model.ErrorMessage = null;
+        // Reset generated content when selection changes
         Model.GeneratedContent = null;
+        Model.ErrorMessage = null;
         StateHasChanged();
     }
 
@@ -124,9 +112,9 @@
 
     private async Task GenerateContent()
     {
-        if (Model.SelectedDocument == null)
+        if (!Model.SelectedDocuments.Any())
         {
-            Model.ErrorMessage = "Veuillez sélectionner un document.";
+            Model.ErrorMessage = "Veuillez sélectionner au moins un document.";
             return;
         }
 
@@ -138,12 +126,25 @@
         {
             ContentType = Model.SelectedContentType,
             Format = Model.SelectedFormat,
-            CustomPrompt = Model.CustomPrompt
+            CustomPrompt = Model.CustomPrompt,
+            DocumentIds = Model.SelectedDocumentIds,
+            UseChunking = Model.UseChunking,
+            MultiDocStrategy = Model.MultiDocStrategy
         };
 
         // Utiliser le service de gestion des erreurs pour la génération de contenu
         var generationResult = await ErrorHandlingService.ExecuteAsync(
-        async () => await ContentGenerationService.GenerateContentAsync(Model.SelectedDocument, options),
+        async () =>
+        {
+            if (Model.SelectedDocuments.Count == 1)
+            {
+                return await ContentGenerationService.GenerateContentAsync(Model.SelectedDocuments[0], options);
+            }
+            else
+            {
+                return await ContentGenerationService.GenerateContentAsync(Model.SelectedDocuments, options);
+            }
+        },
         "content_generation"
         );
 
@@ -153,11 +154,25 @@
 
             // Sauvegarder le contenu généré
             var saveResult = await ErrorHandlingService.ExecuteAsync(
-            async () => await ContentGenerationService.SaveGeneratedContentAsync(
-            Model.SelectedDocument,
-            Model.GeneratedContent,
-            options
-            ),
+            async () =>
+            {
+                if (Model.SelectedDocuments.Count == 1)
+                {
+                    return await ContentGenerationService.SaveGeneratedContentAsync(
+        Model.SelectedDocuments[0],
+        Model.GeneratedContent,
+        options
+        );
+                }
+                else
+                {
+                    return await ContentGenerationService.SaveGeneratedContentAsync(
+        Model.SelectedDocuments,
+        Model.GeneratedContent,
+        options
+        );
+                }
+            },
             "save_generated_content"
             );
 
