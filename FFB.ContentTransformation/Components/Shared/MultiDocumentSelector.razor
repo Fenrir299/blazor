@@ -26,18 +26,18 @@
             </FluentDataGrid>
 
             <div class="selection-confirmation mt-3">
-                <FluentButton Appearance="Appearance.Accent" Disabled="@(!Model.SelectedDocumentIds.Any())"
+                <FluentButton Appearance="Appearance.Accent" Disabled="@(!HasSelectedDocuments())"
                     OnClick="@ConfirmSelection">
                     Confirmer la sélection
                 </FluentButton>
                 <span class="selection-status ms-2">
-                    @(Model.SelectedDocumentIds.Any()
-                                    ? $"{Model.SelectedDocumentIds.Count} document(s) sélectionné(s)"
-                                    : "Aucun document sélectionné")
-            </span>
-        </div>
+                    @(HasSelectedDocuments()
+                        ? $"{Model.SelectedDocumentIds.Count} document(s) sélectionné(s)"
+                        : "Aucun document sélectionné")
+                </span>
+            </div>
 
-        @if (HasProcessingDocuments)
+            @if (HasProcessingDocuments)
             {
                 <div class="auto-refresh-notice mt-2">
                     <FluentButton Appearance="Appearance.Lightweight" OnClick="@RefreshDocuments">
@@ -96,42 +96,113 @@
 
     protected override void OnInitialized()
     {
-        // Add IsSelected property to documents
-        foreach (var doc in Documents)
+        try
         {
-            doc.IsSelected = Model.SelectedDocumentIds.Contains(doc.Id);
-        }
+            // Synchronize document IsSelected state with Model.SelectedDocumentIds
+            foreach (var doc in Documents)
+            {
+                doc.IsSelected = Model.SelectedDocumentIds.Contains(doc.Id);
+            }
 
-        // Show processing options if documents are already selected
-        ShowProcessingOptions = Model.SelectedDocumentIds.Any();
+            // Show processing options if documents are already selected
+            ShowProcessingOptions = Model.SelectedDocumentIds.Any();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error in OnInitialized");
+        }
+    }
+
+    /// <summary>
+    /// Checks if there are any documents selected based on UI state
+    /// </summary>
+    private bool HasSelectedDocuments()
+    {
+        // First check the model's selected IDs list
+        if (Model.SelectedDocumentIds.Any())
+            return true;
+            
+        // Then check UI state as fallback
+        return Documents.Any(d => d.IsSelected);
     }
 
     private async Task ToggleDocumentSelection(Document document)
     {
-        if (document.IsSelected)
+        try
         {
-            if (!Model.SelectedDocumentIds.Contains(document.Id))
+            Logger.LogDebug("Document selection toggled: ID {DocumentId}, IsSelected: {IsSelected}", 
+                document.Id, document.IsSelected);
+
+            if (document.IsSelected)
             {
-                Model.SelectedDocumentIds.Add(document.Id);
+                // Ensure ID is in the list
+                if (!Model.SelectedDocumentIds.Contains(document.Id))
+                {
+                    Model.SelectedDocumentIds.Add(document.Id);
+                    Logger.LogDebug("Added document ID {DocumentId} to selected documents", document.Id);
+                }
             }
+            else
+            {
+                // Remove from the list
+                if (Model.SelectedDocumentIds.Contains(document.Id))
+                {
+                    Model.SelectedDocumentIds.Remove(document.Id);
+                    Logger.LogDebug("Removed document ID {DocumentId} from selected documents", document.Id);
+                }
+            }
+
+            // Update primary selected document for backward compatibility
+            Model.SelectedDocumentId = Model.SelectedDocumentIds.FirstOrDefault();
+            
+            // Force UI update
+            StateHasChanged();
+            
+            await OnSelectionChanged.InvokeAsync();
         }
-        else
+        catch (Exception ex)
         {
-            Model.SelectedDocumentIds.Remove(document.Id);
+            Logger.LogError(ex, "Error toggling document selection for document ID {DocumentId}", document.Id);
         }
-
-        // Update primary selected document for backward compatibility
-        Model.SelectedDocumentId = Model.SelectedDocumentIds.FirstOrDefault();
-
-        await OnSelectionChanged.InvokeAsync();
     }
 
     private async Task ConfirmSelection()
     {
+        // Ensure the model's SelectedDocumentIds is in sync with UI state
+        SynchronizeSelectionState();
+        
         if (Model.SelectedDocumentIds.Any())
         {
             ShowProcessingOptions = true;
             await OnSelectionConfirmed.InvokeAsync();
+        }
+    }
+    
+    /// <summary>
+    /// Ensures Model.SelectedDocumentIds matches the UI selection state
+    /// </summary>
+    private void SynchronizeSelectionState()
+    {
+        try
+        {
+            // Clear existing selection
+            Model.SelectedDocumentIds.Clear();
+            
+            // Add all selected document IDs from UI state
+            foreach (var doc in Documents.Where(d => d.IsSelected))
+            {
+                Model.SelectedDocumentIds.Add(doc.Id);
+            }
+            
+            // Update primary selected document
+            Model.SelectedDocumentId = Model.SelectedDocumentIds.FirstOrDefault();
+            
+            Logger.LogDebug("Selection state synchronized. Selected document count: {Count}", 
+                Model.SelectedDocumentIds.Count);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error synchronizing selection state");
         }
     }
 
